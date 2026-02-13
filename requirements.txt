@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langgraph
+ollama
+qdrant-client
+fastembed
+tavily-python
+duckduckgo-search==6.3.2
+langchain-ollama
+streamlit
