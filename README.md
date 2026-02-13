@@ -53,19 +53,6 @@ graph TD
 ```
 
 
-## Component Breakdown
-
-| Component | Responsibility |
-|-----------|----------------|
-| **Guard Layer** | Initializes state limits (tokens, budget) and sanitizes input. |
-| **Context Retrieval** | Queries `Qdrant` for relevant past interactions to personalize the response. |
-| **Intent Classifier** | Categorizes query (e.g., "Research", "Bug Fix") and checks for clarity. |
-| **Planner** | Decides execution strategy: single-shot (Quick) or iterative (Deep). |
-| **Deep Mode Orchestrator** | Generates search queries and executes web searches (Tavily/DDG). |
-| **Gap Analysis** | Evaluates gathered data against the query, calculating a confidence score. |
-| **Structured Synthesis** | Uses LLM to compile all research data into a comprehensive Markdown report. |
-| **Output Formatter** | Standardizes the final output and handles persistence (File & Vector DB). |
-
 ## 📂 Project Structure
 
 ```bash
