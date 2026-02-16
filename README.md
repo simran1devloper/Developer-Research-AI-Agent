@@ -1,7 +1,8 @@
 # Developer Research AI Agent
 
 A robust, graph-based AI agent designed for deep technical research. It uses **LangGraph** for orchestration, **Ollama** for local LLM inference, **Qdrant** for persistent memory, and **DuckDuckGo/Tavily** for web search.
-##Project Video Link
+
+# Project Video Link
 🎥 **Watch the Project Demo & Explanation:**  
 [Click here to view the video](https://youtu.be/EpRRToI39x0)
 
