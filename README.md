@@ -2,9 +2,12 @@
 
 A robust, graph-based AI agent designed for deep technical research. It uses **LangGraph** for orchestration, **Ollama** for local LLM inference, **Qdrant** for persistent memory, and **DuckDuckGo/Tavily** for web search.
 
-# Project Video Link
+## Project Video Link
 🎥 **Watch the Project Demo & Explanation:**  
 [Click here to view the video](https://youtu.be/EpRRToI39x0)
+## PPT link
+[Click here to view the PPT](https://www.canva.com/design/DAGuEhWYJq4/9jR8cqlc_2o2KQIxPjpFwA/view?utm_content=DAGuEhWYJq4&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h21045fe8d9)
+
 
 
 ## 🚀 Features
