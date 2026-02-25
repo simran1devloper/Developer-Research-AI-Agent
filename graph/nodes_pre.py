@@ -1,11 +1,14 @@
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
 from state import AgentState
 from config import Config
 from memory import memory
+from utils.groq_client import get_llm
 import uuid
+import sys
 
-llm = ChatOllama(model=Config.MODEL_NAME)
+# Initialize a simple Groq client wrapper
+# Acquire LLM (Groq if configured, otherwise DummyLLM fallback)
+llm = get_llm()
+print(f"✅ LLM initialized: {getattr(llm, 'model', 'unknown')}")
 
 def guard_layer(state: AgentState):
     """
@@ -18,8 +21,7 @@ def guard_layer(state: AgentState):
         "research_data": [], 
         "gaps": [], 
         "iterations": 0,
-        "history": state.get("history", [])
-,
+        "history": state.get("history", []),
         "query_id": str(uuid.uuid4())  # Generate unique ID for streaming
     }
 
@@ -40,37 +42,71 @@ def intent_classifier(state: AgentState):
     Intent classifier clarification Orchestrator.
     Determines if the query is clear and what the intent is.
     """
-    prompt = ChatPromptTemplate.from_template(
-        "Classify the following query into one of these categories: "
-        "Research, Bug Fix, Architecture, General Question. "
-        "Also determine if the query is clear (True/False). "
-        "Return the output as 'Category: <category>, Clear: <True/False>'.\n\n"
-        "Query: {query}"
+    if not llm:
+        print("⚠️ Error: LLM (Groq) not available.")
+        return {
+            "intent": "Error",
+            "is_clarified": False,
+            "token_usage": 0
+        }
+
+    prompt_text = (
+        "Classify the following query into one of these categories: Research, Bug Fix, Architecture, General Question. "
+        "Also determine if the query is clear (True/False). Return the output as 'Category: <category>, Clear: <True/False>'.\n\n"
+        f"Query: {state['query']}"
     )
-    chain = prompt | llm
-    response = chain.invoke({"query": state["query"]})
+
+    try:
+        response = llm.generate(prompt_text)
+    except Exception as e:
+        print(f"⚠️ Error calling Groq API: {e}")
+        return {
+            "intent": "Error",
+            "is_clarified": False,
+            "token_usage": 0
+        }
+
+    # Track tokens (estimate)
+    tokens_used = len(str(response).split()) * 2
+
+    content = str(response).strip()
+    print(f"DEBUG intent_classifier - LLM raw response: '{content}'")
     
-    # Track tokens
-    tokens_used = 0
-    if hasattr(response, 'usage_metadata') and response.usage_metadata:
-        tokens_used = response.usage_metadata.get('total_tokens', 0)
-    
-    content = response.content.strip()
-    
-    # Simple parsing (can be made more robust with structured output)
+    # Simple parsing
     intent = "Research"
     is_clarified = True
     
-    if "Clear: False" in content:
+    print(f"DEBUG intent_classifier - Checking for Clear: False or false in content...")
+    if "Clear: False" in content or "false" in content.lower():
+        print(f"DEBUG intent_classifier - Found Clear: False or false, setting is_clarified to False")
         is_clarified = False
+    else:
+        print(f"DEBUG intent_classifier - Did not find Clear: False or false, keeping is_clarified as True")
     
-    # Extract intent crudely for now
+    # Extract intent
     if "Bug Fix" in content: intent = "Bug Fix"
     elif "Architecture" in content: intent = "Architecture"
     elif "General Question" in content: intent = "General Question"
     
-    return {
+    result = {
         "intent": intent, 
         "is_clarified": is_clarified,
         "token_usage": state.get("token_usage", 0) + tokens_used
+    }
+    print(f"DEBUG intent_classifier returning: {result}")
+    return result
+
+
+def clarification_node(state: AgentState):
+    """
+    Ask the user to rephrase when the query is not a research-related query.
+    """
+    message = "This tool is only meant for research related queries...."
+    history = state.get("history", [])
+    history.append({"role": "system", "content": message})
+
+    return {
+        "clarification_prompt": message,
+        "awaiting_user_input": True,
+        "history": history
     }

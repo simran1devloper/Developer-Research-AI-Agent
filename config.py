@@ -4,24 +4,26 @@ from dotenv import load_dotenv
 
 # Load environment variables from a .env file
 load_dotenv()
-OLLAMA_URL = "http://172.22.124.89:11434/api/generate"
-MODEL = "gemma3"
 
 class Config:
-    # --- Model Configuration ---
-    MODEL_NAME = "ministral-3:3b-cloud"  # Local Ollama model
-    TEMPERATURE = 0
-    OLLAMA_BASE_URL = "http://172.22.124.89:11434/api/generate"
+    # --- Model Configuration: Groq API ---
+    GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/v1/models/openai/v1/chat/completions")
+    # Backwards-compatible alias used elsewhere in the code
+    MODEL_NAME = GROQ_MODEL_NAME
+
+    # Model parameters
+    TEMPERATURE = 0.7
+    MAX_NEW_TOKENS = 1024
     
     # --- API Keys ---
-    # Ensure these are set in your .env file
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
     
     # --- Phase 1: Budget & Constraints ---
-    # These values define the 'Guard Layer' limits
     MAX_TOKENS_PER_QUERY = 5000 
-    MAX_ITERATIONS_DEEP_MODE = 3  # Max loops for research
-    CONFIDENCE_THRESHOLD = 0.8    # Minimum confidence to stop deep research
+    MAX_ITERATIONS_DEEP_MODE = 3
+    CONFIDENCE_THRESHOLD = 0.8
     
     # --- Path Configuration ---
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,8 +33,14 @@ class Config:
     @staticmethod
     def validate():
         """Ensure critical config is present."""
+        print(f"🔍 Configuration Check:")
+        print(f"  ✓ Model: {Config.GROQ_MODEL_NAME}")
+        print(f"  ✓ Groq API Key: {'Set' if Config.GROQ_API_KEY else 'Not Set'}")
+        
         if not Config.TAVILY_API_KEY:
-            print("⚠️ Warning: TAVILY_API_KEY not found. Falling back to DuckDuckGo.")
+            print(f"  ⚠️  Tavily API Key not set - using DuckDuckGo for search")
+        else:
+            print(f"  ✓ Tavily API configured")
             
 # Create directories if they don't exist
 os.makedirs(Config.QDRANT_PATH, exist_ok=True)

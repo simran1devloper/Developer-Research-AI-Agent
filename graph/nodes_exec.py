@@ -1,4 +1,3 @@
-from langchain_ollama import ChatOllama
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -7,8 +6,12 @@ from config import Config
 import os
 from prompts.research_prompts import GAP_ANALYSIS_PROMPT, RESEARCH_SYNTHESIS_PROMPT
 from utils.streaming import get_streaming_buffer
+from utils.groq_client import get_llm
 
-llm = ChatOllama(model=Config.MODEL_NAME)
+# Initialize Groq client
+# Acquire LLM (Groq if configured, otherwise DummyLLM fallback)
+llm = get_llm()
+print(f"✅ LLM initialized: {getattr(llm, 'model', 'unknown')}")
 
 # Custom DDG Tool to bypass langchain-community import issues
 from duckduckgo_search import DDGS
@@ -34,6 +37,10 @@ def planner_router(state: AgentState):
     Planner and router.
     Decides between 'quick' and 'deep' mode.
     """
+    if not llm:
+        print("⚠️ Error: Groq LLM not available")
+        return {"mode": "quick", "token_usage": 0}
+    
     # Build conversation history context
     history = state.get("history", [])
     history_text = ""
@@ -42,22 +49,20 @@ def planner_router(state: AgentState):
             f"{msg['role'].capitalize()}: {msg['content']}" for msg in history[-4:]  # Last 4 messages
         ]) + "\n"
     
-    prompt = ChatPromptTemplate.from_template(
-        "Analyze the query complexity. "
-        "If it requires simple fact checking or code snippet, choose 'quick'. "
-        "If it requires extensive research, comparison, or architectural design, choose 'deep'. "
-        "Return ONLY the mode: 'quick' or 'deep'.\\n\\n"
-        "{history_context}"
-        "Current Query: {query}"
+    prompt_text = (
+        "Analyze the query complexity. If it requires simple fact checking or code snippet, choose 'quick'. "
+        "If it requires extensive research, comparison, or architectural design, choose 'deep'. Return ONLY the mode: 'quick' or 'deep'.\n\n"
+        f"{history_text}\nCurrent Query: {state['query']}"
     )
-    chain = prompt | llm
-    response = chain.invoke({"query": state["query"], "history_context": history_text})
-    mode = response.content.strip().lower()
-    
-    # Track tokens
-    tokens_used = 0
-    if hasattr(response, 'usage_metadata') and response.usage_metadata:
-        tokens_used = response.usage_metadata.get('total_tokens', 0)
+
+    try:
+        response = llm.generate(prompt_text)
+    except Exception as e:
+        print(f"⚠️ Error in planner_router: {e}")
+        return {"mode": "quick", "token_usage": 0}
+
+    mode = str(response).strip().lower()
+    tokens_used = len(str(response).split()) * 2
     
     if "deep" in mode:
         return {"mode": "deep", "token_usage": state.get("token_usage", 0) + tokens_used}
@@ -65,49 +70,50 @@ def planner_router(state: AgentState):
 
 def quick_mode_executor(state: AgentState):
     """
-    Quick mode executor with token-by-token streaming.
+    Quick mode executor - generates response directly without streaming.
     """
+    if not llm:
+        return {
+            "research_data": [{"content": "Error: LLM not available", "source": "Error"}],
+            "final_report": "Error: LLM not available",
+            "token_usage": 0
+        }
+    
     query_id = state.get("query_id", "")
     buffer = get_streaming_buffer(query_id) if query_id else None
     
-    full_response = ""
-    tokens_used = 0
-    
     # Build conversation history for context
     history = state.get("history", [])
-    messages = []
+    context_text = ""
     
-    # Add conversation history
-    for msg in history[-6:]:  # Last 6 messages for context
-        if msg['role'] == 'user':
-            messages.append(HumanMessage(content=msg['content']))
-        else:
-            messages.append(SystemMessage(content=msg['content']))
+    if history:
+        context_text = "Previous conversation:\n" + "\n".join([
+            f"{msg['role'].capitalize()}: {msg['content']}" for msg in history[-6:]
+        ]) + "\n\n"
     
-    # Add current query
-    messages.append(HumanMessage(content=state["query"]))
+    full_prompt = context_text + f"Query: {state['query']}\n\nProvide a detailed response:"
     
-    # Use streaming with conversation history
-    for chunk in llm.stream(messages):
-        token = chunk.content
-        full_response += token
-        
-        # Add to streaming buffer for real-time display
-        if buffer:
-            buffer.add_chunk(token)
+    try:
+        full_response = llm.invoke(full_prompt)
+    except Exception as e:
+        print(f"⚠️ Error in quick_mode_executor: {e}")
+        return {
+            "research_data": [{"content": f"Error: {e}", "source": "Error"}],
+            "final_report": f"Error: {e}",
+            "token_usage": 0
+        }
     
-    # Mark streaming complete
+    # Add to buffer for real-time display
     if buffer:
+        buffer.add_chunk(str(full_response))
         buffer.mark_complete()
     
-    # Track token metadata (if available)
-    # Note: streaming doesn't provide usage_metadata, estimate based on content
-    tokens_used = len(full_response.split()) * 2  # Rough estimate
+    # Estimate tokens
+    tokens_used = len(str(full_response).split()) * 2
     
-    # Return complete state
     return {
-        "research_data": [{"content": full_response, "source": "LLM Knowledge"}],
-        "final_report": full_response,
+        "research_data": [{"content": str(full_response), "source": "LLM Knowledge"}],
+        "final_report": str(full_response),
         "token_usage": state.get("token_usage", 0) + tokens_used
     }
 
@@ -169,8 +175,15 @@ def gap_analysis_node(state: AgentState):
     Cross references and Gap analysis.
     Checks if enough information is gathered.
     """
+    if not llm:
+        return {
+            "confidence_score": 0.5,
+            "gaps": ["LLM not available"],
+            "token_usage": 0
+        }
+    
     data = state.get("research_data", [])
-    combined_content = "\\n".join([d["content"] for d in data])
+    combined_content = "\n".join([d["content"] for d in data])
     history = state.get("history", [])
     
     # Build history context
@@ -180,32 +193,47 @@ def gap_analysis_node(state: AgentState):
             f"{msg['role']}: {msg['content'][:100]}" for msg in history[-3:]
         ])
     
-    prompt = GAP_ANALYSIS_PROMPT
-    
-    chain = prompt | llm
-    response = chain.invoke({
-        "query": state["query"] + history_text, 
-        "research_data": combined_content[:5000]  # Context limit
-    })
-    
-    # Track tokens
-    tokens_used = 0
-    if hasattr(response, 'usage_metadata') and response.usage_metadata:
-        tokens_used = response.usage_metadata.get('total_tokens', 0)
+    # Build prompt text for gap analysis (use prompt template from prompts/research_prompts)
+    gap_prompt = (
+        "You are a technical analyst evaluating research progress.\n"
+        f"Current Research Findings:\n{combined_content}\n\n"
+        "Task:\n1. Identify missing technical details required to answer the query:\n"
+        f'"{state["query"]}"\n'
+        "2. Detect any contradictions between different data sources.\n"
+        "3. Assign a Confidence Score (0.0 to 1.0) based on source agreement and detail depth.\n\n"
+        "Format your response as a JSON object with keys: \"gaps\" (list), \"contradictions\" (list), \"confidence_score\" (float)."
+    )
+
+    try:
+        response = llm.generate(gap_prompt)
+    except Exception as e:
+        print(f"Error in gap analysis: {e}")
+        return {
+            "confidence_score": 0.5,
+            "gaps": ["Error in analysis"],
+            "token_usage": 0
+        }
+
+    tokens_used = len(str(response).split()) * 2
     
     # Simple parsing
     try:
-        # Looking for "Confidence: 0.X"
         import re
-        score_match = re.search(r"Confidence:\\s*([0-9.]+)", response.content)
+        response_text = str(response)
+        
+        # Looking for "Confidence: 0.X"
+        score_match = re.search(r"Confidence:\s*([0-9.]+)", response_text)
         score = float(score_match.group(1)) if score_match else 0.5
         
         gaps = []
-        if "Gaps:" in response.content:
-            gaps_str = response.content.split("Gaps:")[1].strip()
-            gaps = [g.strip() for g in gaps_str.split(",")]
+        if "Gaps:" in response_text or "gap" in response_text.lower():
+            # Extract gaps if mentioned
+            parts = response_text.split("Gaps:" if "Gaps:" in response_text else "gaps:") 
+            if len(parts) > 1:
+                gaps_str = parts[1].split("\n")[0].strip()
+                gaps = [g.strip() for g in gaps_str.split(",")]
             
-    except:
+    except Exception as parse_error:
         score = 0.5
         gaps = ["Could not parse analysis"]
 
@@ -217,44 +245,52 @@ def gap_analysis_node(state: AgentState):
 
 def structured_synthesis_node(state: AgentState):
     """
-    Structure reasoning and synthesis with streaming.
+    Structure reasoning and synthesis.
     """
+    if not llm:
+        return {
+            "final_report": "Error: LLM not available",
+            "token_usage": 0
+        }
+    
     query_id = state.get("query_id", "")
     buffer = get_streaming_buffer(query_id) if query_id else None
     
     data = state.get("research_data", [])
-    combined_content = "\\n".join([d["content"] for d in data])
+    combined_content = "\n".join([d["content"] for d in data])
     history = state.get("history", [])
     
     # Build conversation context
     history_context = ""
     if history:
-        history_context = "\\n\\nConversation context:\\n" + "\\n".join([
+        history_context = "\n\nConversation context:\n" + "\n".join([
             f"{msg['role'].capitalize()}: {msg['content']}" for msg in history[-4:]
-        ]) + "\\n"
+        ]) + "\n"
     
-    prompt = RESEARCH_SYNTHESIS_PROMPT
+    # Build synthesis prompt
+    synth_prompt = (
+        "You are a world-class Technical Documentation Engineer.\n"
+        "Synthesize the following research data into a production-grade report.\n\n"
+        f"Research Context:\n{combined_content}\n\n"
+        f"Original Query: {state['query']}\n\n"
+        "Instructions:\n- Use professional Markdown.\n- Ensure every claim is linked to the research findings (Evidence Trace).\n- Highlight risks and performance trade-offs.\n- Avoid fluff; optimize for senior developer readability.\n"
+    )
+
+    try:
+        full_response = llm.generate(synth_prompt)
+    except Exception as e:
+        print(f"Error in synthesis: {e}")
+        return {
+            "final_report": f"Error during synthesis: {e}",
+            "token_usage": 0
+        }
     
-    full_response = ""
-    tokens_used = 0
-    
-    # Stream the synthesis with conversation context
-    chain = prompt | llm
-    query_with_context = state["query"] + history_context
-    
-    for chunk in chain.stream({"query": query_with_context, "context": combined_content[:8000]}):
-        token = chunk.content
-        full_response += token
-        
-        # Add to streaming buffer
-        if buffer:
-            buffer.add_chunk(token)
-    
-    # Mark complete
+    # Add to buffer for real-time display
     if buffer:
+        buffer.add_chunk(str(full_response))
         buffer.mark_complete()
     
-    cleaned_report = full_response.replace("```markdown", "").replace("```", "").strip()
+    cleaned_report = str(full_response).replace("```markdown", "").replace("```", "").strip()
     tokens_used = len(cleaned_report.split()) * 2  # Estimate
     
     return {

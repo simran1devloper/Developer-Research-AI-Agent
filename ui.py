@@ -134,6 +134,6 @@ def render_footer():
     with col2:
         st.markdown("""
         <div style='text-align: center; color: #666; font-size: 0.9rem;'>
-            Powered by LangGraph • Qdrant • Ollama
+            Powered by LangGraph • Qdrant • Groq
         </div>
         """, unsafe_allow_html=True)

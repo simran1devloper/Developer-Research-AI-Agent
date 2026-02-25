@@ -2,7 +2,7 @@
 
 from langgraph.graph import StateGraph, END
 from state import AgentState
-from graph.nodes_pre import guard_layer, context_retrieval, intent_classifier
+from graph.nodes_pre import guard_layer, context_retrieval, intent_classifier, clarification_node
 from graph.nodes_exec import (
     planner_router, 
     quick_mode_executor, 
@@ -21,13 +21,14 @@ def build_research_graph():
     workflow.add_node("context_retrieval", context_retrieval)
     workflow.add_node("intent_classifier", intent_classifier)
     workflow.add_node("planner_router", planner_router)
+    workflow.add_node("clarification_node", clarification_node) 
     
     # Execution Nodes
     workflow.add_node("quick_mode", quick_mode_executor)
     workflow.add_node("deep_research", deep_mode_orchestrator)
     workflow.add_node("gap_analysis", gap_analysis_node)
     workflow.add_node("synthesize", structured_synthesis_node)
-    
+    workflow.add_node("clarify", clarification_node)
     # Output Node
     workflow.add_node("formatter", format_output)
 
@@ -39,12 +40,15 @@ def build_research_graph():
     # Conditional: Ask for clarification or proceed to Planner
     workflow.add_conditional_edges(
         "intent_classifier",
-        lambda x: "planner_router" if x["is_clarified"] else END,
+        lambda x: "planner_router" if x.get("is_clarified") else "clarify",
         {
             "planner_router": "planner_router",
-            "end": END
+            "clarify": "clarify"
         }
     )
+
+    # If clarification is needed, ask the user and then re-run intent classification
+    workflow.add_edge("clarify", "intent_classifier")
 
     # Phase 2: Routing based on Mode (Quick vs Deep)
     workflow.add_conditional_edges(
