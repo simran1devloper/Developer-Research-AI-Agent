@@ -2,7 +2,8 @@
 
 A robust, graph-based AI agent designed for deep technical research. It uses **LangGraph** for orchestration, **Ollama** for local LLM inference, **Qdrant** for persistent memory, and **DuckDuckGo/Tavily** for web search.
 
-To lift the dependency from localhost, the second branch named  can also be reviewed. It uses Groq's "llama-3.1-8b-instant". Tavily apis used for web search and if at all it fails, falls back to DuckDuckGo.
+To lift the dependency from localhost, the second branch named  cloud_llm can also be reviewed. It uses Groq's "llama-3.1-8b-instant". Tavily apis used for web search and if at all it fails, falls back to DuckDuckGo.
+(Running instructions can be viewed in **run.sh** : can be copied and pasted exactly on the terminal.
 
 ## Project Video Link
 🎥 **Watch the Project Demo & Explanation:**  
