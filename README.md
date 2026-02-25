@@ -7,7 +7,7 @@ To lift the dependency from localhost, the second branch named  cloud_llm can al
 
 ## Project Video Link
 🎥 **Watch the Project Demo & Explanation:**  
-[Click here to view the video](https://youtu.be/EpRRToI39x0)
+[Click here to view the video](https://www.youtube.com/watch?v=ZU9Nimg0qCg)
 ## PPT link
 [Click here to view the PPT](https://www.canva.com/design/DAGuEhWYJq4/9jR8cqlc_2o2KQIxPjpFwA/view?utm_content=DAGuEhWYJq4&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h21045fe8d9)
 
