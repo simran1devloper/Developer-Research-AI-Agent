@@ -1,5 +1,11 @@
 # Developer Research AI Agent
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
+[![Qdrant](https://img.shields.io/badge/VectorDB-Qdrant-red.svg)](https://qdrant.tech/)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama-white.svg)](https://ollama.com/)
+[![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io/)
+
 A robust, graph-based AI agent designed for deep technical research. It uses **LangGraph** for orchestration, **Ollama** for local LLM inference, **Qdrant** for persistent memory, and **DuckDuckGo/Tavily** for web search.
 
 To lift the dependency from localhost, the second branch named  cloud_llm can also be reviewed. It uses Groq's "llama-3.1-8b-instant". Tavily apis used for web search and if at all it fails, falls back to DuckDuckGo.
